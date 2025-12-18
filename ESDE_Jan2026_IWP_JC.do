@@ -155,8 +155,8 @@ bysort hh_id country: egen hh_missing_disability = max(missing_disability) // du
 // replace actsta=8 if ((pl080+pl085+pl086+pl087+pl088+pl089+pl090) / tot) > 0.5 // others not in employment
 }
 gen employment=.
-replace employment=1 if px050==1 | px050==2 | px050==3 // employees, self-employed and other employed
-replace employment=0 if px050==4 | px050==5 | px050==6 | px050==7 | px050==8
+replace employment=1 if px050==2 | px050==3 | px050==4 // employees, self-employed and other employed
+replace employment=0 if px050==5 | px050==6 | px050==7 | px050==8
 
 * --- Employment status: generate a dummy to identify those in employment (reference period: current) ---
 {  // Based on variable pl032 (self-defined current economic status): open to see description
