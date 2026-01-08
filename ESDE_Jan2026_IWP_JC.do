@@ -213,23 +213,36 @@ replace ind_WI_groups=1 if ind_WI>=0 & ind_WI<0.8 & ind_WI!=. // low WI [0-0.8[
 replace ind_WI_groups=2 if ind_WI>=0.8 & ind_WI!=. // high WI [0.8-...[
 
 * --- Low earners: compute the median income from work (at the individual level) and generate a dummy =1 if income from work is below national median ---
-egen median_inc_work=median(py010g) if py010g!=. & employment==1 & age18_64==1, by(country year) // median income from work by country and year
+egen country2=group(country)
+generate median_inc_work=.
+quietly forvalues i = 1/26 { 
+	summarize py010g if py010g!=. & employment==1 & age18_64==1 & country2 == `i' [aw=rb050], detail 
+	replace median_inc_work = r(p50) if py010g!=. & employment==1 & age18_64==1 & country2 == `i' 
+} 
 su median_inc_work
 tabstat median_inc_work if employment==1 & age18_64==1 [aw=rb050], by(country) statistics (mean)
+tabstat py010g if employment==1 & age18_64==1 [aw=rb050], by(country) statistics (mean)
+generate low_median_inc=median_inc_work*2/3
+tabstat low_median_inc if employment==1 & age18_64==1 [aw=rb050], by(country) statistics (mean)
 
 gen low_earner=.
-replace low_earner=1 if py010g < 2/3*median_inc_work & py010g<.
-replace low_earner=0 if py010g >= 2/3*median_inc_work & py010g<.
+replace low_earner=1 if py010g <= 2/3*median_inc_work & py010g<.
+replace low_earner=0 if py010g > 2/3*median_inc_work & py010g<.
 
 gen month_work=pl074 + pl073 + pl075 + pl076
 gen month_inc=py010g/month_work
-egen median_monthinc_work=median(month_inc) if employment==1 & age18_64==1, by(country year) // median income from work by country and year
+generate median_monthinc_work=.
+quietly forvalues i = 1/26 { 
+	summarize month_inc if month_inc!=. & employment==1 & age18_64==1 & country2 == `i' [aw=rb050], detail 
+	replace median_monthinc_work = r(p50) if py010g!=. & employment==1 & age18_64==1 & country2 == `i' 
+}
 su median_monthinc_work
 tabstat median_monthinc_work if employment==1 & age18_64==1 [aw=rb050], by(country) statistics (mean)
+tabstat month_inc if employment==1 & age18_64==1 [aw=rb050], by(country) statistics (mean)
 
 gen low_earner2=.
-replace low_earner2=1 if month_inc < 2/3*median_monthinc_work & month_inc<.
-replace low_earner2=0 if month_inc >= 2/3*median_monthinc_work & month_inc<.
+replace low_earner2=1 if month_inc <= 2/3*median_monthinc_work & month_inc<.
+replace low_earner2=0 if month_inc > 2/3*median_monthinc_work & month_inc<.
 
 * --- Generate a dummy variable for households IWP (=1 if IWP, =0 if not IWP)
 {  // based on variable hx080 (poverty indicator): open to see description
@@ -513,7 +526,17 @@ encode country, gen(country_num)
 
 /// 4.1. SINGLE-ADULT HOUSEHOLDS ANALYSIS
 
-* --- Model 1: all except income ---
+* --- Model 1: basic specs ---
+
+logit iwp i.hh_children i.female ib3.age_groups i.educ_level i.migrant_groups i.country_num [pweight=db090] if employment==1 & single_hh==1 & age18_64==1, or
+
+margins hh_children
+margins female
+margins age_groups
+margins educ_level
+margins migrant_groups
+
+* --- Model 2: working conditions ---
 logit iwp i.hh_children i.hh_WI_groups i.FT_PT i.temporary i.female ib3.age_groups i.educ_level i.migrant_groups i.country_num [pweight=db090] if employment==1 & single_hh==1 & age18_64==1, or
 
 margins hh_children
@@ -534,15 +557,11 @@ margins, dydx(age_groups)
 margins, dydx(educ_level)
 margins, dydx(migrant groups)
 
-* --- Model 2: all inlcuding income ---
-
-logit iwp i.low_earner2 i.hh_children i.hh_WI_groups i.FT_PT i.temporary i.female ib3.age_groups i.educ_level i.migrant_groups i.country_num [pweight=db090] if employment==1 & single_hh==1 & age18_64==1, or
+* --- Model 3: income ---
+logit iwp i.low_earner2 i.hh_children i.female ib3.age_groups i.educ_level i.migrant_groups i.country_num [pweight=db090] if employment==1 & single_hh==1 & age18_64==1, or
 
 margins low_earner2
 margins hh_children
-margins hh_WI_groups
-margins FT_PT
-margins temporary
 margins female
 margins age_groups
 margins educ_level
@@ -550,26 +569,23 @@ margins migrant_groups
 
 margins, dydx(low_earner2)
 margins, dydx(hh_children)
-margins, dydx(hh_WI_groups) 
-margins, dydx(FT_PT) 
-margins, dydx(temporary)
 margins, dydx(female)
 margins, dydx(age_groups)
 margins, dydx(educ_level)
 margins, dydx(migrant_groups)
 
+
+
 /// 4.2. MULTIPLE ADULTS HOUSEHOLDS ANALYSIS
 
 * --- Model 3: socio-demographics of other working-age adults
-logit iwp i.partner i.hh_WI_groups i.hh_children i.hh_dependent_adult i.hh_pensioner i.FT_PT i.temporary i.low_earner2##add_earner_FTPT i.hh_young i.hh_low_educ i.hh_migrants i.country_num [pweight=db090] if employment==1 & single_hh==0 & age18_64==1, or
+logit iwp i.partner i.hh_WI_groups i.hh_children i.hh_dependent_adult i.hh_pensioner i.low_earner2##add_earner_FTPT i.hh_young i.hh_low_educ i.hh_migrants i.country_num [pweight=db090] if employment==1 & single_hh==0 & age18_64==1, or
 
 margins partner
 margins hh_children
 margins hh_dependent_adult
 margins hh_pensioner
 margins hh_WI_groups 
-margins FT_PT
-margins temporary
 margins low_earner2##add_earner_FTPT
 margins hh_young
 margins hh_low_educ
